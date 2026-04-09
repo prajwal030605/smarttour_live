@@ -71,9 +71,9 @@ export default function AdvisoryPage() {
     : 'Great places to visit right now';
 
   return (
-    <div className="min-h-screen flex bg-[#0f0f12]">
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#0f0f12]">
       <Sidebar />
-      <main className="flex-1 p-6 overflow-auto">
+      <main className="flex-1 p-4 md:p-6 overflow-auto">
         <motion.h1
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
