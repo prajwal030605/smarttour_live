@@ -31,10 +31,10 @@ function toRad(deg: number): number {
   return deg * (Math.PI / 180);
 }
 
-const VALID_RADIUS_KM = 5;
+const VALID_RADIUS_KM = 50;
 
 /**
- * Validates if user is within 5km of checkpoint
+ * Validates if user is within 50km of Dehradun checkpoint (covers Dehradun city and nearby areas)
  */
 export function isWithinCheckpointRadius(
   lat: number,

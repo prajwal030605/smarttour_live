@@ -54,10 +54,11 @@ export interface AnalyticsResponse {
 export interface PredictionResponse {
   predictedInflow: number;
   predictedStatus: CrowdStatus;
+  mse: number;
 }
 
-/** Checkpoint coordinates for GPS validation (within 5km) */
+/** Checkpoint coordinates for GPS validation (within 50km) - Dehradun city center */
 export const CHECKPOINT_COORDS = {
-  latitude: 28.6139, // Delhi default - can be configured per deployment
-  longitude: 77.209,
+  latitude: 30.3165, // Dehradun - main gateway for Dehradun & Mussoorie region
+  longitude: 78.0322,
 } as const;
