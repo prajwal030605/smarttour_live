@@ -49,11 +49,17 @@ const statusColors: Record<CrowdStatus, string> = {
 };
 
 export default function AdminPage() {
+  const ADMIN_USERNAME = 'peppa_pig';
+  const ADMIN_PASSWORD = '1234';
   const [crowd, setCrowd] = useState<CrowdData | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [prediction, setPrediction] = useState<PredictionData | null>(null);
   const [, setThreshold] = useState<ThresholdData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
   const [thresholdForm, setThresholdForm] = useState({
     normal_limit: 2000,
     high_limit: 5000,
@@ -91,10 +97,20 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
+    const auth = sessionStorage.getItem('admin_auth');
+    if (auth === 'ok') {
+      setIsAuthenticated(true);
+      return;
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isAuthenticated]);
 
   const handleSaveThreshold = async () => {
     setSaving(true);
@@ -128,10 +144,58 @@ export default function AdminPage() {
   const formattedMse =
     typeof prediction?.mse === 'number' ? prediction.mse.toFixed(2) : '--';
 
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+      setAuthError('');
+      setLoading(true);
+      sessionStorage.setItem('admin_auth', 'ok');
+      return;
+    }
+    setAuthError('Invalid username or password');
+  };
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#0f0f12]">
       <Sidebar />
       <main className="flex-1 p-4 md:p-6 overflow-auto">
+        {!isAuthenticated ? (
+          <div className="max-w-md mx-auto mt-8 glass rounded-2xl p-6 border border-white/10">
+            <h1 className="text-2xl font-bold mb-2">Admin Login</h1>
+            <p className="text-zinc-500 mb-6">Enter admin credentials to continue.</p>
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm text-zinc-400 mb-2">Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-zinc-400 mb-2">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+              {authError && <p className="text-red-400 text-sm">{authError}</p>}
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium"
+              >
+                Login
+              </button>
+            </form>
+          </div>
+        ) : (
+        <>
         <motion.h1
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -355,6 +419,8 @@ export default function AdminPage() {
               </div>
             </motion.div>
           </div>
+        )}
+        </>
         )}
       </main>
     </div>
