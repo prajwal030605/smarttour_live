@@ -8,18 +8,20 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     if (supabaseServer) {
-      const [entriesRes, exitsRes, configRes] = await Promise.all([
-        supabaseServer.from('vehicle_logs').select('*', { count: 'exact', head: true }).eq('type', 'entry'),
-        supabaseServer.from('vehicle_logs').select('*', { count: 'exact', head: true }).eq('type', 'exit'),
+      const [activeRes, entriesRes, exitsRes, configRes] = await Promise.all([
+        supabaseServer.from('active_vehicles').select('id', { count: 'exact', head: true }),
+        supabaseServer.from('vehicle_logs').select('id', { count: 'exact', head: true }).eq('type', 'entry'),
+        supabaseServer.from('vehicle_logs').select('id', { count: 'exact', head: true }).eq('type', 'exit'),
         supabaseServer.from('threshold_config').select('*').limit(1).single(),
       ]);
 
+      if (activeRes.error) throw activeRes.error;
       if (entriesRes.error) throw entriesRes.error;
       if (exitsRes.error) throw exitsRes.error;
 
       const totalEntries = entriesRes.count ?? 0;
       const totalExits = exitsRes.count ?? 0;
-      const activeVehicles = Math.max(0, totalEntries - totalExits);
+      const activeVehicles = activeRes.count ?? 0;
 
       type ThresholdRow = { normal_limit: number; high_limit: number; critical_limit: number };
       const config = configRes.data as ThresholdRow | null;
@@ -43,7 +45,7 @@ export async function GET() {
     const logs = mockDb.vehicleLogs.selectAll();
     const totalEntries = logs.filter((l) => l.type === 'entry').length;
     const totalExits = logs.filter((l) => l.type === 'exit').length;
-    const activeVehicles = Math.max(0, totalEntries - totalExits);
+    const activeVehicles = mockDb.activeVehicles.count();
     const t = mockDb.threshold.get();
 
     let status: CrowdStatus = 'normal';

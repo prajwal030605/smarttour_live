@@ -8,13 +8,20 @@ import QRCodeDisplay from '@/components/ui/QRCodeDisplay';
 export default function QRPage() {
   const [baseUrl, setBaseUrl] = useState('');
   const [networkUrl, setNetworkUrl] = useState('');
+  const LIVE_BASE_URL = 'https://smarttour-live.vercel.app';
 
   useEffect(() => {
-    setBaseUrl(window.location.origin);
+    const origin = window.location.origin;
+    // Prefer live deployment URL for production QR reliability.
+    if (origin.includes('smarttour-live.vercel.app')) {
+      setBaseUrl(LIVE_BASE_URL);
+      return;
+    }
+    setBaseUrl(origin);
   }, []);
 
   const isLocalhost = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
-  const urlForQR = networkUrl.trim() || baseUrl;
+  const urlForQR = networkUrl.trim() || baseUrl || LIVE_BASE_URL;
 
   return (
     <div className="min-h-screen flex bg-[#0f0f12]">

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
 import { mockDb } from '@/lib/mock-db';
-import { meanSquaredError, predict } from '@/utils/linearRegression';
+import { meanSquaredError, predict } from '@/utils/polynomialRegression';
 import type { CrowdStatus } from '@/types';
 
 export const dynamic = 'force-dynamic';

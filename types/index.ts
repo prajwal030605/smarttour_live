@@ -12,6 +12,8 @@ export interface VehicleLog {
   id: string;
   type: VehicleLogType;
   vehicle_type: string;
+  vehicle_registration_number: string;
+  phone_number: string;
   passenger_count: number;
   latitude: number;
   longitude: number;

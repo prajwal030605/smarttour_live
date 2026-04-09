@@ -13,6 +13,8 @@ type SubmitStatus = 'idle' | 'loading' | 'success' | 'error';
 export default function ExitPage() {
   const [vehicleType, setVehicleType] = useState('');
   const [passengerCount, setPassengerCount] = useState(1);
+  const [vehicleRegistrationNumber, setVehicleRegistrationNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [location, setLocation] = useState<{
     lat: number;
     lon: number;
@@ -81,6 +83,8 @@ export default function ExitPage() {
         body: JSON.stringify({
           type: 'exit',
           vehicle_type: vehicleType,
+          vehicle_registration_number: vehicleRegistrationNumber.trim().toUpperCase(),
+          phone_number: phoneNumber.trim(),
           passenger_count: passengerCount,
           latitude: location.lat,
           longitude: location.lon,
@@ -102,7 +106,13 @@ export default function ExitPage() {
     }
   };
 
-  const canSubmit = !location.loading && !location.error && vehicleType && passengerCount >= 0;
+  const canSubmit =
+    !location.loading &&
+    !location.error &&
+    vehicleType &&
+    passengerCount >= 0 &&
+    vehicleRegistrationNumber.trim().length > 0 &&
+    phoneNumber.trim().length > 0;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#0f0f12] via-[#16161a] to-[#0f0f12]">
@@ -220,6 +230,34 @@ export default function ExitPage() {
                   value={passengerCount}
                   onChange={(e) => setPassengerCount(parseInt(e.target.value, 10) || 0)}
                   className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Vehicle Registration Number
+                </label>
+                <input
+                  type="text"
+                  value={vehicleRegistrationNumber}
+                  onChange={(e) => setVehicleRegistrationNumber(e.target.value.toUpperCase())}
+                  placeholder="Use the same as Entry"
+                  className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="Use the same as Entry"
+                  className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-indigo-500 focus:outline-none"
+                  required
                 />
               </div>
 

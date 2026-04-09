@@ -18,6 +18,8 @@ export interface Database {
           id: string;
           type: string;
           vehicle_type: string;
+          vehicle_registration_number: string;
+          phone_number: string;
           passenger_count: number;
           latitude: number;
           longitude: number;
@@ -27,12 +29,37 @@ export interface Database {
           id?: string;
           type: string;
           vehicle_type: string;
+          vehicle_registration_number: string;
+          phone_number: string;
           passenger_count: number;
           latitude: number;
           longitude: number;
           created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['vehicle_logs']['Insert']>;
+      };
+      active_vehicles: {
+        Row: {
+          id: string;
+          vehicle_registration_number: string;
+          phone_number: string;
+          vehicle_type: string;
+          passenger_count: number;
+          latitude: number;
+          longitude: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          vehicle_registration_number: string;
+          phone_number: string;
+          vehicle_type: string;
+          passenger_count: number;
+          latitude: number;
+          longitude: number;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['active_vehicles']['Insert']>;
       };
       threshold_config: {
         Row: {

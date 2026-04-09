@@ -6,11 +6,17 @@ CREATE TABLE IF NOT EXISTS vehicle_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type TEXT NOT NULL CHECK (type IN ('entry', 'exit')),
   vehicle_type TEXT NOT NULL,
+  vehicle_registration_number TEXT NOT NULL DEFAULT '',
+  phone_number TEXT NOT NULL DEFAULT '',
   passenger_count INTEGER NOT NULL DEFAULT 0,
   latitude DOUBLE PRECISION NOT NULL,
   longitude DOUBLE PRECISION NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE vehicle_logs
+  ADD COLUMN IF NOT EXISTS vehicle_registration_number TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS phone_number TEXT NOT NULL DEFAULT '';
 
 -- Index for faster date-based queries
 CREATE INDEX IF NOT EXISTS idx_vehicle_logs_created_at ON vehicle_logs(created_at);
@@ -22,6 +28,25 @@ ALTER TABLE vehicle_logs ENABLE ROW LEVEL SECURITY;
 -- Policy: Allow all operations for anon (adjust per your auth requirements)
 DROP POLICY IF EXISTS "Allow all for vehicle_logs" ON vehicle_logs;
 CREATE POLICY "Allow all for vehicle_logs" ON vehicle_logs
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- 1b. active_vehicles (currently inside destination)
+CREATE TABLE IF NOT EXISTS active_vehicles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_registration_number TEXT NOT NULL,
+  phone_number TEXT NOT NULL,
+  vehicle_type TEXT NOT NULL,
+  passenger_count INTEGER NOT NULL DEFAULT 0,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (vehicle_registration_number, phone_number)
+);
+
+ALTER TABLE active_vehicles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all for active_vehicles" ON active_vehicles;
+CREATE POLICY "Allow all for active_vehicles" ON active_vehicles
   FOR ALL USING (true) WITH CHECK (true);
 
 -- 2. threshold_config
