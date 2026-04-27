@@ -2,30 +2,173 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Leaflet CSS */
+@import 'leaflet/dist/leaflet.css';
+
 :root {
-  --background: #0f0f12;
-  --foreground: #f4f4f5;
-  --card: rgba(255, 255, 255, 0.03);
-  --card-border: rgba(255, 255, 255, 0.08);
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
+  --background: #071422;
+  --foreground: #e2f0ff;
+  --card: rgba(30, 58, 95, 0.45);
+  --card-border: rgba(13, 148, 136, 0.22);
+  --accent: #0d9488;
+  --accent-hover: #14b8a6;
+  --accent-muted: rgba(13, 148, 136, 0.15);
+  --deep-blue: #1e3a5f;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(30, 58, 95, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(13, 148, 136, 0.4);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(13, 148, 136, 0.6);
+}
+
+/* Input & select styling for dark theme */
+input, select, textarea {
+  color-scheme: dark;
+}
+
+select option {
+  background: #0f2440;
+  color: #e2f0ff;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Primary glass card - deep blue tint */
   .glass {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+    @apply bg-[#1e3a5f]/40 backdrop-blur-xl border border-teal-500/20;
   }
+
+  /* Darker glass variant */
+  .glass-dark {
+    @apply bg-[#071422]/80 backdrop-blur-xl border border-teal-500/10;
+  }
+
+  /* Teal gradient text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-teal-300 via-cyan-300 to-sky-300 bg-clip-text text-transparent;
+  }
+
+  /* Blue gradient text */
+  .text-gradient-blue {
+    @apply bg-gradient-to-r from-sky-300 via-blue-300 to-indigo-300 bg-clip-text text-transparent;
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    @apply transition-all duration-200 hover:border-teal-500/40 hover:shadow-[0_0_20px_rgba(13,148,136,0.15)];
+  }
+
+  /* Teal glow shadow */
+  .teal-glow {
+    box-shadow: 0 0 30px rgba(13, 148, 136, 0.2), 0 0 60px rgba(13, 148, 136, 0.05);
+  }
+
+  /* Scanning animation for LPR */
+  .scan-line {
+    animation: scan 2s linear infinite;
+  }
+
+  /* Status indicator pulse */
+  .pulse-green {
+    animation: pulseGreen 2s ease-in-out infinite;
+  }
+  .pulse-amber {
+    animation: pulseAmber 2s ease-in-out infinite;
+  }
+  .pulse-red {
+    animation: pulseRed 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes scan {
+  0% { top: 0%; opacity: 1; }
+  45% { opacity: 1; }
+  50% { top: 100%; opacity: 0; }
+  50.01% { top: 0%; opacity: 0; }
+  55% { opacity: 1; }
+  100% { top: 100%; opacity: 1; }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(30px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGreen {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+}
+
+@keyframes pulseAmber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+}
+
+@keyframes pulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+/* Leaflet override for dark theme */
+.leaflet-container {
+  background: #0f2440 !important;
+  font-family: 'Poppins', sans-serif;
+  border-radius: 12px;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #0f2440;
+  color: #e2f0ff;
+  border: 1px solid rgba(13, 148, 136, 0.3);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.leaflet-popup-tip {
+  background: #0f2440;
+}
+
+.leaflet-control-zoom a {
+  background: #1e3a5f !important;
+  color: #e2f0ff !important;
+  border-color: rgba(13, 148, 136, 0.3) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #2a4f7f !important;
 }

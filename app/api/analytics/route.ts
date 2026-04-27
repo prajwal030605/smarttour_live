@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
 import { mockDb } from '@/lib/mock-db';
 
@@ -43,34 +43,50 @@ function computeAnalytics(logList: { type: string; created_at: string }[]) {
   return { byDate, byHour };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const locationId = searchParams.get('location_id');
+    const locationSlug = searchParams.get('location_slug');
+
+    let resolvedId: string | null = locationId;
+    if (!resolvedId && locationSlug) {
+      if (supabaseServer) {
+        const { data } = await supabaseServer
+          .from('locations')
+          .select('id')
+          .eq('slug', locationSlug)
+          .single();
+        resolvedId = data?.id ?? null;
+      } else {
+        resolvedId = mockDb.locations.findBySlug(locationSlug)?.id ?? null;
+      }
+    }
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const fromDate = thirtyDaysAgo.toISOString();
 
     if (supabaseServer) {
-      const { data: logs, error } = await supabaseServer
+      let q = supabaseServer
         .from('vehicle_logs')
         .select('type, created_at')
         .gte('created_at', fromDate);
-
+      if (resolvedId) q = q.eq('location_id', resolvedId);
+      const { data: logs, error } = await q;
       if (error) throw error;
 
-      type LogRow = { type: string; created_at: string };
-      const logList: LogRow[] = (logs ?? []) as LogRow[];
-      const { byDate, byHour } = computeAnalytics(logList);
-      return NextResponse.json({ byDate, byHour });
+      const logList = (logs ?? []) as { type: string; created_at: string }[];
+      return NextResponse.json(computeAnalytics(logList));
     }
 
-    const logs = mockDb.vehicleLogs.selectSince(fromDate);
+    const logs = mockDb.vehicleLogs.selectSince(fromDate, resolvedId ?? undefined);
     const logList = logs.map((l) => ({ type: l.type, created_at: l.created_at }));
-    const { byDate, byHour } = computeAnalytics(logList);
-    return NextResponse.json({ byDate, byHour });
+    return NextResponse.json(computeAnalytics(logList));
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to fetch analytics' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
