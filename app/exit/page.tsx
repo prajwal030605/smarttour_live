@@ -7,6 +7,7 @@ import { Toast, type ToastType } from '@/components/ui/Toast';
 import Confetti from '@/components/ui/Confetti';
 import { VEHICLE_TYPES } from '@/utils/constants';
 import { CHECKPOINT_COORDS, type Location } from '@/types';
+import { loadSession } from '@/utils/device';
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -23,6 +24,7 @@ export default function ExitPage() {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
 
   const captureLocation = useCallback(() => {
     setGps((prev) => ({ ...prev, loading: true, error: null }));
@@ -38,6 +40,17 @@ export default function ExitPage() {
   }, []);
 
   useEffect(() => { captureLocation(); }, [captureLocation]);
+
+  // Prefill from registered session
+  useEffect(() => {
+    const s = loadSession();
+    if (s && new Date(s.expires_at).getTime() > Date.now()) {
+      setHasSession(true);
+      setVehicleRegistrationNumber(s.vehicle_registration_number);
+      setVehicleType(s.vehicle_type || 'Car');
+      setPassengerCount(s.passenger_count || 1);
+    }
+  }, []);
 
   useEffect(() => {
     fetch('/api/locations')
@@ -69,7 +82,14 @@ export default function ExitPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Request failed');
+      if (!res.ok) {
+        if (data.error?.toLowerCase().includes('no active entry')) {
+          throw new Error(
+            `No entry found for "${vehicleRegistrationNumber.toUpperCase()}" at ${selectedName}. Make sure you selected the correct location and plate.`,
+          );
+        }
+        throw new Error(data.error || 'Request failed');
+      }
       setSubmitStatus('success');
       setShowConfetti(true);
       setToast({ message: 'Exit recorded. Safe travels!', type: 'success' });
@@ -141,6 +161,27 @@ export default function ExitPage() {
                 <p className="text-xs text-blue-200/50">Manual checkpoint — geofencing handles this automatically</p>
               </div>
             </div>
+
+            {hasSession && (
+              <div className="rounded-xl px-3 py-2 border border-teal-500/30 bg-teal-500/5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-teal-300">
+                  <span>🔐</span>
+                  <span>
+                    Using <strong className="font-mono">{vehicleRegistrationNumber}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasSession(false);
+                    setVehicleRegistrationNumber('');
+                  }}
+                  className="text-xs text-blue-200/50 hover:text-teal-300 underline underline-offset-2"
+                >
+                  Different vehicle
+                </button>
+              </div>
+            )}
 
             {/* GPS */}
             <div className="p-3.5 rounded-xl bg-navy-800/60 border border-teal-500/10">
