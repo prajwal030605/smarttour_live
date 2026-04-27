@@ -1,211 +1,280 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import Sidebar from '@/components/layout/Sidebar';
-import type { CrowdStatus } from '@/types';
-import type { TouristPlace } from '@/types';
+import Link from 'next/link';
+import type { LocationCrowdSummary, CrowdStatus } from '@/types';
 
-interface CrowdData {
-  status: CrowdStatus;
-  activeVehicles: number;
-}
+const STATUS_META: Record<CrowdStatus, { label: string; color: string; bar: string; badge: string; dot: string }> = {
+  normal: {
+    label: 'Normal',
+    color: 'border-emerald-500/30 bg-emerald-500/5',
+    bar: 'bg-emerald-400',
+    badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
+    dot: 'bg-emerald-400',
+  },
+  high: {
+    label: 'High',
+    color: 'border-amber-500/30 bg-amber-500/5',
+    bar: 'bg-amber-400',
+    badge: 'bg-amber-500/15 text-amber-300 border-amber-500/25',
+    dot: 'bg-amber-400 animate-pulse',
+  },
+  critical: {
+    label: 'Critical',
+    color: 'border-red-500/30 bg-red-500/5',
+    bar: 'bg-red-400',
+    badge: 'bg-red-500/15 text-red-300 border-red-500/25',
+    dot: 'bg-red-400 animate-pulse',
+  },
+};
 
-interface PredictionData {
-  predictedStatus: CrowdStatus;
-  predictedInflow: number;
-  mse: number;
-}
-
-const statusStyles: Record<CrowdStatus, string> = {
-  normal: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30',
-  high: 'from-amber-500/20 to-amber-600/10 border-amber-500/30',
-  critical: 'from-red-500/20 to-red-600/10 border-red-500/30',
+const CATEGORY_EMOJI: Record<string, string> = {
+  'Hill Station': '🏔️',
+  'Religious': '🛕',
+  'Religious + Adventure': '🕉️',
+  'Adventure': '⛷️',
+  'Wildlife': '🐯',
+  'Trekking': '🌸',
 };
 
 export default function AdvisoryPage() {
-  const [crowd, setCrowd] = useState<CrowdData | null>(null);
-  const [prediction, setPrediction] = useState<PredictionData | null>(null);
-  const [places, setPlaces] = useState<TouristPlace[]>([]);
+  const [summaries, setSummaries] = useState<LocationCrowdSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [filter, setFilter] = useState<CrowdStatus | 'all'>('all');
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [crowdRes, predictRes, placesRes] = await Promise.all([
-          fetch('/api/current-crowd', { cache: 'no-store' }),
-          fetch('/api/predict', { cache: 'no-store' }),
-          fetch('/api/places', { cache: 'no-store' }),
-        ]);
-        if (crowdRes.ok) setCrowd(await crowdRes.json());
-        if (predictRes.ok) setPrediction(await predictRes.json());
-        if (placesRes.ok) setPlaces(await placesRes.json());
-      } catch {
-        // Silently handle
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/current-crowd?summary=1', { cache: 'no-store' });
+      if (res.ok) {
+        setSummaries(await res.json());
+        setLastUpdated(new Date());
       }
+    } finally {
+      setLoading(false);
     }
-    fetchData();
-    const interval = setInterval(fetchData, 60000);
-    return () => clearInterval(interval);
   }, []);
 
-  const status = crowd?.status ?? 'normal';
-  const predStatus = prediction?.predictedStatus ?? 'normal';
-  const formattedMse =
-    typeof prediction?.mse === 'number' ? prediction.mse.toFixed(2) : '--';
+  useEffect(() => {
+    fetchData();
+    const t = setInterval(fetchData, 30_000);
+    return () => clearInterval(t);
+  }, [fetchData]);
 
-  // If crowd high/critical → show low crowd places; if normal → show popular (high/medium)
-  const isCrowded = status === 'high' || status === 'critical';
-  const recommendedPlaces = places.filter((p) =>
-    isCrowded ? p.crowd_level === 'low' : ['medium', 'high'].includes(p.crowd_level)
-  );
-  const otherPlaces = places.filter((p) => !recommendedPlaces.includes(p));
-
-  const recommendationTitle = isCrowded
-    ? 'Low Crowd Destinations'
-    : 'Popular Destinations';
-  const recommendationSubtitle = isCrowded
-    ? 'Consider these less crowded spots'
-    : 'Great places to visit right now';
+  const filtered = filter === 'all' ? summaries : summaries.filter((s) => s.status === filter);
+  const totalActive = summaries.reduce((s, x) => s + x.activeVehicles, 0);
+  const criticalCount = summaries.filter((s) => s.status === 'critical').length;
+  const highCount = summaries.filter((s) => s.status === 'high').length;
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#0f0f12]">
-      <Sidebar />
-      <main className="flex-1 p-4 md:p-6 overflow-auto">
-        <motion.h1
+    <div className="min-h-screen bg-navy-900 text-foreground">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-40 bg-navy-900/80 backdrop-blur-xl border-b border-teal-500/15">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-600 to-teal-500 flex items-center justify-center font-bold text-white text-xs shadow-teal">
+              ST
+            </div>
+            <span className="font-bold text-sm text-gradient hidden sm:block">SmartTour</span>
+          </Link>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+              <span className="text-xs text-teal-300/70 font-medium">Live</span>
+            </div>
+            {lastUpdated && (
+              <span className="text-xs text-blue-200/30 hidden sm:block">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+            <Link
+              href="/register"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-600/15 border border-teal-500/25 text-teal-300 text-xs font-semibold hover:bg-teal-600/25"
+            >
+              🚗 Register
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-2xl font-bold mb-2"
+          className="mb-8"
         >
-          Tourist Advisory
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="text-zinc-500 mb-6 max-w-2xl"
-        >
-          Real-time crowd status for Dehradun & Mussoorie. When crowd levels are high, we recommend less crowded destinations. When normal, popular spots are great to visit.
-        </motion.p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-blue-100 mb-1">
+            Live Crowd <span className="text-gradient">Advisory</span>
+          </h1>
+          <p className="text-blue-200/50 text-sm">
+            Real-time crowd levels across 10 Uttarakhand destinations. Auto-refreshes every 30s.
+          </p>
+        </motion.div>
 
+        {/* Summary stats */}
+        {!loading && summaries.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8"
+          >
+            {[
+              { label: 'Total Active', value: totalActive.toLocaleString(), icon: '🚗', sub: 'vehicles now' },
+              { label: 'Locations', value: summaries.length, icon: '📍', sub: 'monitored' },
+              { label: 'High Alert', value: highCount, icon: '⚠️', sub: 'locations' },
+              { label: 'Critical', value: criticalCount, icon: '🚨', sub: 'locations' },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="glass rounded-2xl p-4 border border-teal-500/15 text-center"
+              >
+                <div className="text-2xl mb-1">{stat.icon}</div>
+                <div className="text-xl font-bold text-blue-100">{stat.value}</div>
+                <div className="text-xs text-blue-200/40 font-medium">{stat.label}</div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+
+        {/* Filter tabs */}
+        <div className="flex items-center gap-2 mb-6 flex-wrap">
+          {(['all', 'normal', 'high', 'critical'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-150 ${
+                filter === f
+                  ? 'bg-teal-600/25 border-teal-500/40 text-teal-300'
+                  : 'bg-transparent border-teal-500/10 text-blue-200/40 hover:border-teal-500/25 hover:text-blue-200/60'
+              }`}
+            >
+              {f === 'all' ? `All (${summaries.length})` : f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Locations grid */}
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center justify-center py-24">
+            <div className="w-10 h-10 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Status Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={`glass rounded-xl p-6 border bg-gradient-to-br ${statusStyles[status]}`}
-              >
-                <p className="text-zinc-400 text-sm">Current Status</p>
-                <p className="text-2xl font-bold mt-1 capitalize">{status}</p>
-                <p className="text-zinc-500 text-sm mt-2">
-                  Active vehicles: {crowd?.activeVehicles ?? 0}
-                </p>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={`glass rounded-xl p-6 border bg-gradient-to-br ${statusStyles[predStatus]}`}
-              >
-                <p className="text-zinc-400 text-sm">Predicted Status (Tomorrow)</p>
-                <p className="text-2xl font-bold mt-1 capitalize">{predStatus}</p>
-                <p className="text-zinc-500 text-sm mt-2">
-                  Predicted inflow: {prediction?.predictedInflow ?? 0}
-                </p>
-                <p className="text-zinc-500 text-sm mt-1">
-                  Model MSE: {formattedMse} (lower is better)
-                </p>
-              </motion.div>
-            </div>
-
-            {/* Recommendations */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="glass rounded-xl p-6 border border-white/10"
-            >
-              <h2 className="text-lg font-semibold mb-2">{recommendationTitle}</h2>
-              <p className="text-zinc-500 text-sm mb-4">{recommendationSubtitle}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {recommendedPlaces.map((place, i) => (
-                  <motion.div
-                    key={place.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 * i }}
-                    className="p-4 rounded-lg bg-white/5 border border-white/10 hover:border-indigo-500/30 transition-colors"
-                  >
-                    <h3 className="font-semibold">{place.name}</h3>
-                    <p className="text-xs text-indigo-400 mt-0.5">{place.category}</p>
-                    <p className="text-sm text-zinc-500 mt-2">{place.description}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((s, i) => {
+              const meta = STATUS_META[s.status];
+              const emoji = CATEGORY_EMOJI[s.location.category] ?? '🗺️';
+              return (
+                <motion.div
+                  key={s.location.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  whileHover={{ y: -3 }}
+                  className={`glass rounded-2xl p-5 border ${meta.color} transition-all duration-200 group`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-navy-800/60 border border-teal-500/15 flex items-center justify-center text-xl shrink-0">
+                        {emoji}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-blue-100 text-sm group-hover:text-teal-300 transition-colors">
+                          {s.location.name}
+                        </h3>
+                        <p className="text-xs text-blue-200/40">{s.location.district}</p>
+                      </div>
+                    </div>
                     <span
-                      className={`inline-block mt-2 px-2 py-0.5 rounded text-xs ${
-                        place.crowd_level === 'low'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : place.crowd_level === 'medium'
-                          ? 'bg-amber-500/20 text-amber-400'
-                          : 'bg-red-500/20 text-red-400'
-                      }`}
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border ${meta.badge}`}
                     >
-                      {place.crowd_level} crowd
+                      <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+                      {meta.label}
                     </span>
-                  </motion.div>
-                ))}
-              </div>
-              {recommendedPlaces.length === 0 && (
-                <p className="text-zinc-500">
-                  No destinations match the current recommendation criteria. Check back later or explore Other Destinations below.
-                </p>
-              )}
-            </motion.div>
+                  </div>
 
-            {/* Other Places */}
-            {otherPlaces.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="glass rounded-xl p-6 border border-white/10"
-              >
-                <h2 className="text-lg font-semibold mb-4">Other Destinations</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {otherPlaces.map((place, i) => (
-                    <motion.div
-                      key={place.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.05 * i }}
-                      className="p-4 rounded-lg bg-white/5 border border-white/10 hover:border-white/20 transition-colors"
-                    >
-                      <h3 className="font-semibold">{place.name}</h3>
-                      <p className="text-xs text-zinc-500 mt-0.5">{place.category}</p>
-                      <span
-                        className={`inline-block mt-2 px-2 py-0.5 rounded text-xs ${
-                          place.crowd_level === 'low'
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : place.crowd_level === 'medium'
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-red-500/20 text-red-400'
-                        }`}
-                      >
-                        {place.crowd_level}
+                  {/* Capacity bar */}
+                  <div className="mb-3">
+                    <div className="flex justify-between text-xs text-blue-200/40 mb-1">
+                      <span>Capacity</span>
+                      <span className="font-semibold text-blue-200/60">
+                        {s.capacityPercent}%
                       </span>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-navy-800/60 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${s.capacityPercent}%` }}
+                        transition={{ duration: 0.8, delay: i * 0.05 + 0.2 }}
+                        className={`h-full rounded-full ${meta.bar}`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-base font-bold text-blue-100">{s.activeVehicles}</p>
+                      <p className="text-xs text-blue-200/30">Active</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-bold text-blue-100">{s.todayEntries}</p>
+                      <p className="text-xs text-blue-200/30">Entries</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-bold text-blue-100">{s.todayExits}</p>
+                      <p className="text-xs text-blue-200/30">Exits</p>
+                    </div>
+                  </div>
+
+                  {/* Category tag */}
+                  <div className="mt-3 pt-3 border-t border-teal-500/10">
+                    <span className="text-xs text-blue-200/30">{s.location.category}</span>
+                    <span className="ml-2 text-xs text-blue-200/20">
+                      · Cap {s.location.max_capacity.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {/* Warning banner */}
+                  {s.status === 'critical' && (
+                    <div className="mt-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
+                      ⚠️ At capacity — consider an alternate destination
+                    </div>
+                  )}
+                  {s.status === 'high' && (
+                    <div className="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+                      Crowded today — expect delays and limited parking
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+
+            {filtered.length === 0 && (
+              <div className="col-span-full text-center py-16 text-blue-200/30 text-sm">
+                No locations match this filter.
+              </div>
             )}
           </div>
         )}
-      </main>
+
+        {/* Footer tip */}
+        <div className="mt-12 glass rounded-2xl p-6 border border-teal-500/15 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold text-blue-100 text-sm mb-1">Planning a trip?</p>
+            <p className="text-xs text-blue-200/40">
+              Register your vehicle once — GPS auto-logging handles entry &amp; exit.
+            </p>
+          </div>
+          <Link
+            href="/register"
+            className="shrink-0 inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 text-white text-sm font-semibold hover:from-teal-500 hover:to-teal-400 transition-all shadow-teal"
+          >
+            🚗 Register Now →
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

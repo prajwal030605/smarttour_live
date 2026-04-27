@@ -1,0 +1,42 @@
+{
+  "name": "SmartTour – Crowd Intelligence",
+  "short_name": "SmartTour",
+  "description": "Real-time tourist crowd monitoring and AI forecasting for Uttarakhand",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071422",
+  "theme_color": "#0d9488",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "GPS Tracker",
+      "url": "/track",
+      "description": "Open GPS tracker"
+    },
+    {
+      "name": "Live Advisory",
+      "url": "/advisory",
+      "description": "Check crowd status"
+    },
+    {
+      "name": "Register Vehicle",
+      "url": "/register",
+      "description": "Register your vehicle"
+    }
+  ],
+  "categories": ["travel", "navigation", "utilities"]
+}
