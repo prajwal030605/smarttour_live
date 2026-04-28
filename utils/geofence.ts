@@ -21,9 +21,14 @@ export interface GeofenceConfig {
 }
 
 export const DEFAULT_GEOFENCE_CONFIG: GeofenceConfig = {
-  dwellMs: 3 * 60 * 1000,
-  debounceMs: 60 * 1000,
-  maxAccuracyM: 50,
+  // Reduced from 3min → 60s. Demo + real-world testing need fast confirmation.
+  // 60s is still enough to ignore drive-throughs at >60 km/h.
+  dwellMs: 60 * 1000,
+  debounceMs: 30 * 1000,
+  // Increased from 50m → 200m. Mobile GPS in hilly terrain (Mussoorie,
+  // Kedarnath, etc.) routinely reports 80-300m accuracy. 50m was rejecting
+  // most readings → geofencer never saw the user as "inside".
+  maxAccuracyM: 200,
 };
 
 export type GeofenceEventKind = 'entered' | 'exited' | 'heartbeat';
@@ -173,5 +178,17 @@ export class Geofencer {
       }
     }
     return best;
+  }
+
+  /** Expose candidate state so UI can show "Confirming entry in N seconds…" */
+  getCandidate(): { id: string | null; since: number } {
+    return {
+      id: this.state.candidateZoneId,
+      since: this.state.candidateSince,
+    };
+  }
+
+  getDwellMs(): number {
+    return this.cfg.dwellMs;
   }
 }
