@@ -226,14 +226,28 @@ export default function RegisterPage() {
           >
             <div>
               <h1 className="text-xl font-bold text-blue-100">Enter Verification Code</h1>
-              <p className="text-xs text-blue-200/50 mt-1">We sent a 6-digit code to {email}</p>
+              <p className="text-xs text-blue-200/50 mt-1">
+                {devCode ? 'Email service not configured — your code is shown below' : `We sent a 6-digit code to ${email}`}
+              </p>
             </div>
 
             {devCode && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
-                <strong>Dev mode:</strong> Code is <code className="font-mono">{devCode}</code>
-                <p className="text-xs text-amber-300/70 mt-1">
-                  (No email provider configured. Set RESEND_API_KEY to send real emails.)
+              <div className="p-4 rounded-xl bg-amber-500/15 border-2 border-amber-400/50 text-center">
+                <p className="text-xs font-semibold text-amber-300/80 uppercase tracking-widest mb-2">
+                  Your verification code
+                </p>
+                <p className="text-3xl font-extrabold text-amber-200 font-mono tracking-[0.4em]">
+                  {devCode}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCode(devCode)}
+                  className="mt-3 text-xs text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  Tap to autofill →
+                </button>
+                <p className="text-[10px] text-amber-300/50 mt-2">
+                  Production emails require RESEND_API_KEY. See README.
                 </p>
               </div>
             )}
