@@ -165,34 +165,46 @@ async function buildSummary(): Promise<LocationCrowdSummary[]> {
   todayStart.setHours(0, 0, 0, 0);
 
   if (supabaseServer) {
-    const { data: locs } = await supabaseServer
-      .from('locations')
-      .select('id, slug, name, category, district, center_lat, center_lon, max_capacity, normal_limit, high_limit, critical_limit')
-      .eq('is_active', true)
-      .order('name');
+    // Fetch locations + ALL counts in parallel using one big SQL trip per type
+    // (3 round-trips total instead of 1 + 3*N).
+    const todayIso = todayStart.toISOString();
+    const [locsRes, activeRes, entriesRes, exitsRes] = await Promise.all([
+      supabaseServer
+        .from('locations')
+        .select('id, slug, name, category, district, center_lat, center_lon, max_capacity, normal_limit, high_limit, critical_limit')
+        .eq('is_active', true)
+        .order('name'),
+      supabaseServer
+        .from('active_vehicles')
+        .select('location_id'),
+      supabaseServer
+        .from('vehicle_logs')
+        .select('location_id')
+        .eq('type', 'entry')
+        .gte('created_at', todayIso),
+      supabaseServer
+        .from('vehicle_logs')
+        .select('location_id')
+        .eq('type', 'exit')
+        .gte('created_at', todayIso),
+    ]);
 
-    const summaries: LocationCrowdSummary[] = [];
-    for (const loc of locs ?? []) {
-      const [active, entries, exits] = await Promise.all([
-        supabaseServer
-          .from('active_vehicles')
-          .select('id', { count: 'exact', head: true })
-          .eq('location_id', loc.id),
-        supabaseServer
-          .from('vehicle_logs')
-          .select('id', { count: 'exact', head: true })
-          .eq('type', 'entry')
-          .eq('location_id', loc.id)
-          .gte('created_at', todayStart.toISOString()),
-        supabaseServer
-          .from('vehicle_logs')
-          .select('id', { count: 'exact', head: true })
-          .eq('type', 'exit')
-          .eq('location_id', loc.id)
-          .gte('created_at', todayStart.toISOString()),
-      ]);
-      const av = active.count ?? 0;
-      summaries.push({
+    // Group counts by location_id client-side
+    const tally = (rows: { location_id: string | null }[] | null) => {
+      const m = new Map<string, number>();
+      for (const r of rows ?? []) {
+        if (!r.location_id) continue;
+        m.set(r.location_id, (m.get(r.location_id) ?? 0) + 1);
+      }
+      return m;
+    };
+    const activeMap = tally(activeRes.data);
+    const entriesMap = tally(entriesRes.data);
+    const exitsMap = tally(exitsRes.data);
+
+    return (locsRes.data ?? []).map((loc) => {
+      const av = activeMap.get(loc.id) ?? 0;
+      return {
         location: {
           id: loc.id,
           slug: loc.slug,
@@ -204,13 +216,12 @@ async function buildSummary(): Promise<LocationCrowdSummary[]> {
           max_capacity: loc.max_capacity,
         },
         activeVehicles: av,
-        todayEntries: entries.count ?? 0,
-        todayExits: exits.count ?? 0,
+        todayEntries: entriesMap.get(loc.id) ?? 0,
+        todayExits: exitsMap.get(loc.id) ?? 0,
         status: classifyCrowd(av, loc),
         capacityPercent: loc.max_capacity > 0 ? Math.min(100, Math.round((av / loc.max_capacity) * 100)) : 0,
-      });
-    }
-    return summaries;
+      };
+    });
   }
 
   return mockDb.locations.selectAll().map((loc) => {

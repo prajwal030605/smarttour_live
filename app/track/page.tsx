@@ -47,6 +47,7 @@ export default function TrackPage() {
   const [reg, setReg] = useState('');
   const [locationsLoaded, setLocationsLoaded] = useState(false);
   const [debugMsg, setDebugMsg] = useState<string>('Initializing…');
+  const [candidate, setCandidate] = useState<{ name: string | null; remainingSec: number } | null>(null);
 
   const geofencerRef = useRef<Geofencer | null>(null);
   const lastHeartbeatRef = useRef<number>(0);
@@ -113,6 +114,20 @@ export default function TrackPage() {
       setNearestKm(nearest);
 
       const events: GeofenceEvent[] = gf.process(lat, lon, acc, now);
+
+      // Update candidate countdown for UI feedback
+      const cand = gf.getCandidate();
+      if (cand.id && gf.getCurrentZoneId() !== cand.id) {
+        const dwellMs = gf.getDwellMs();
+        const elapsedMs = now - cand.since;
+        const remainingSec = Math.max(0, Math.ceil((dwellMs - elapsedMs) / 1000));
+        // Find candidate name from locations passed to geofencer
+        const allLocs = (gf as unknown as { locations: Array<{ id: string; name: string }> }).locations;
+        const candName = allLocs?.find((l) => l.id === cand.id)?.name ?? null;
+        setCandidate({ name: candName, remainingSec });
+      } else {
+        setCandidate(null);
+      }
 
       for (const ev of events) {
         if (ev.kind === 'entered') {
@@ -436,6 +451,32 @@ export default function TrackPage() {
                 Auto-logged on entry
               </div>
             </motion.div>
+          ) : candidate && candidate.name ? (
+            <motion.div
+              key="confirming"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass rounded-2xl p-6 border border-amber-500/40 text-center"
+            >
+              <motion.div
+                animate={{ scale: [1, 1.08, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="w-16 h-16 mx-auto rounded-full bg-amber-500/15 border-2 border-amber-400/50 flex items-center justify-center text-3xl mb-4"
+              >
+                ⏳
+              </motion.div>
+              <p className="text-xs text-amber-400/80 font-semibold uppercase tracking-widest mb-1">
+                Detecting entry
+              </p>
+              <h2 className="text-2xl font-extrabold text-amber-300 mb-1">{candidate.name}</h2>
+              <p className="text-sm text-blue-200/50">
+                Confirming in <span className="text-amber-300 font-bold">{candidate.remainingSec}s</span>
+              </p>
+              <p className="text-xs text-blue-200/30 mt-2">
+                Stay inside the zone to auto-log your entry.
+              </p>
+            </motion.div>
           ) : (
             <motion.div
               key="outside"
@@ -457,6 +498,11 @@ export default function TrackPage() {
                   <span className="text-teal-400">{nearestKm.km.toFixed(1)} km away</span>
                 </p>
               )}
+              {accuracy !== null && accuracy > 200 && (
+                <p className="text-xs text-amber-400/70 mt-2">
+                  ⚠ GPS accuracy is poor (±{Math.round(accuracy)}m). Move outside or to a window for better signal.
+                </p>
+              )}
               <p className="text-xs text-blue-200/30 mt-2">
                 Entry will be auto-logged when you arrive at a tracked destination.
               </p>
@@ -470,7 +516,7 @@ export default function TrackPage() {
             How Tracking Works
           </p>
           {[
-            { icon: '⏳', text: 'Stay inside a zone for 3 min to confirm entry' },
+            { icon: '⏳', text: 'Stay inside a zone for 60 sec to confirm entry' },
             { icon: '📡', text: 'Heartbeat sent every 30 seconds while inside' },
             { icon: '🚪', text: 'Exit logged automatically when you leave the zone' },
             { icon: '📶', text: 'Keep this tab open — background tracking is off by default' },

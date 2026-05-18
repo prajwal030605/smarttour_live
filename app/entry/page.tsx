@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { Toast, type ToastType } from '@/components/ui/Toast';
 import { VEHICLE_TYPES } from '@/utils/constants';
 import { CHECKPOINT_COORDS, type Location } from '@/types';
+import { loadSession } from '@/utils/device';
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error';
 type ScanStatus = 'idle' | 'scanning' | 'detected';
+type CameraStatus = 'off' | 'starting' | 'on' | 'error';
 
 export default function EntryPage() {
   const [vehicleType, setVehicleType] = useState('');
@@ -23,6 +25,61 @@ export default function EntryPage() {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [scanStatus, setScanStatus] = useState<ScanStatus>('idle');
+  const [hasSession, setHasSession] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState<CameraStatus>('off');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraStatus('off');
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraStatus('error');
+      setCameraError('Camera API not supported on this browser. Use HTTPS or localhost.');
+      return;
+    }
+    setCameraStatus('starting');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+      setCameraStatus('on');
+    } catch (err) {
+      setCameraStatus('error');
+      const msg = err instanceof Error ? err.message : 'Failed to access camera';
+      if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('denied')) {
+        setCameraError('Camera permission denied. Allow camera access in your browser and retry.');
+      } else if (msg.toLowerCase().includes('notfound') || msg.toLowerCase().includes('not found')) {
+        setCameraError('No camera found on this device.');
+      } else {
+        setCameraError(msg);
+      }
+    }
+  }, []);
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
 
   const captureLocation = useCallback(() => {
     setLocation((prev) => ({ ...prev, loading: true, error: null }));
@@ -56,6 +113,17 @@ export default function EntryPage() {
 
   useEffect(() => { captureLocation(); }, [captureLocation]);
 
+  // Prefill from registered session if available
+  useEffect(() => {
+    const s = loadSession();
+    if (s && new Date(s.expires_at).getTime() > Date.now()) {
+      setHasSession(true);
+      setVehicleRegistrationNumber(s.vehicle_registration_number);
+      setVehicleType(s.vehicle_type || 'Car');
+      setPassengerCount(s.passenger_count || 1);
+    }
+  }, []);
+
   // Fetch active locations on mount
   useEffect(() => {
     fetch('/api/locations')
@@ -73,7 +141,13 @@ export default function EntryPage() {
     locations.find((l) => l.id === selectedLocationId)?.name ?? 'Selected destination';
 
   const handleAIScan = () => {
+    if (cameraStatus !== 'on') {
+      setToast({ message: 'Start the camera first', type: 'error' });
+      return;
+    }
     setScanStatus('scanning');
+    // Demo OCR: in production this would post a frame to a backend OCR
+    // service (OpenCV + Tesseract / Google Vision / AWS Rekognition).
     const samplePlates = ['UK07AB1234', 'UK08CD5678', 'UK01EF9012', 'UK06GH3456', 'UK05IJ7890'];
     setTimeout(() => {
       const plate = samplePlates[Math.floor(Math.random() * samplePlates.length)];
@@ -184,6 +258,29 @@ export default function EntryPage() {
               </div>
             </div>
 
+            {/* Registered-session banner */}
+            {hasSession && (
+              <div className="glass rounded-xl px-4 py-3 border border-teal-500/30 bg-teal-500/5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-teal-300">
+                  <span>🔐</span>
+                  <span>
+                    Using registered vehicle{' '}
+                    <strong className="font-mono">{vehicleRegistrationNumber}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasSession(false);
+                    setVehicleRegistrationNumber('');
+                  }}
+                  className="text-xs text-blue-200/50 hover:text-teal-300 underline underline-offset-2"
+                >
+                  Use different vehicle
+                </button>
+              </div>
+            )}
+
             {/* LPR Camera Feed */}
             <div className="glass rounded-2xl border border-teal-500/20 overflow-hidden">
               <div className="px-5 pt-4 pb-2 flex items-center justify-between">
@@ -197,9 +294,18 @@ export default function EntryPage() {
               </div>
 
               {/* Camera preview box */}
-              <div className="relative mx-5 mb-4 h-36 rounded-xl overflow-hidden bg-navy-950/80 border border-teal-500/15">
-                {/* Grid overlay */}
-                <div className="absolute inset-0 opacity-10"
+              <div className="relative mx-5 mb-4 h-56 sm:h-64 rounded-xl overflow-hidden bg-navy-950/80 border border-teal-500/15">
+                {/* The actual video element - always mounted; visibility toggled via class */}
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  className={`absolute inset-0 w-full h-full object-cover ${cameraStatus === 'on' ? 'opacity-100' : 'opacity-0'}`}
+                />
+
+                {/* Grid overlay (always on top of video) */}
+                <div className="pointer-events-none absolute inset-0 opacity-10"
                   style={{
                     backgroundImage: 'linear-gradient(rgba(13,148,136,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(13,148,136,0.5) 1px, transparent 1px)',
                     backgroundSize: '20px 20px',
@@ -207,7 +313,7 @@ export default function EntryPage() {
                 />
                 {/* Corner markers */}
                 {['top-2 left-2', 'top-2 right-2', 'bottom-2 left-2', 'bottom-2 right-2'].map((pos, i) => (
-                  <div key={i} className={`absolute ${pos} w-4 h-4 border-teal-400`}
+                  <div key={i} className={`pointer-events-none absolute ${pos} w-4 h-4 border-teal-400`}
                     style={{
                       borderTop: i < 2 ? '2px solid' : 'none',
                       borderBottom: i >= 2 ? '2px solid' : 'none',
@@ -219,43 +325,76 @@ export default function EntryPage() {
 
                 {/* Scan line */}
                 {scanStatus === 'scanning' && (
-                  <div className="absolute left-0 right-0 h-0.5 bg-teal-400 shadow-[0_0_8px_rgba(13,148,136,0.8)] scan-line" />
+                  <div className="pointer-events-none absolute left-0 right-0 h-0.5 bg-teal-400 shadow-[0_0_8px_rgba(13,148,136,0.8)] scan-line" />
                 )}
 
-                {/* Content */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                  {scanStatus === 'idle' && (
-                    <>
-                      <span className="text-3xl opacity-30">🎥</span>
-                      <span className="text-xs text-blue-200/30 font-medium">Waiting for vehicle...</span>
-                    </>
-                  )}
-                  {scanStatus === 'scanning' && (
-                    <>
-                      <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-xs text-teal-300 font-medium">Analyzing plate...</span>
-                    </>
-                  )}
-                  {scanStatus === 'detected' && (
-                    <>
-                      <span className="text-3xl">✅</span>
-                      <span className="text-sm font-bold text-teal-300">{vehicleRegistrationNumber}</span>
-                      <span className="text-xs text-blue-200/40">Plate detected successfully</span>
-                    </>
-                  )}
-                </div>
+                {/* Overlay state — shown when camera is off / starting / errored */}
+                {cameraStatus !== 'on' && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-navy-950/90">
+                    {cameraStatus === 'off' && (
+                      <>
+                        <span className="text-3xl opacity-40">📷</span>
+                        <span className="text-xs text-blue-200/40 font-medium">Camera is off</span>
+                        <span className="text-[10px] text-blue-200/25">Tap “Start Camera” below</span>
+                      </>
+                    )}
+                    {cameraStatus === 'starting' && (
+                      <>
+                        <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs text-teal-300 font-medium">Requesting camera…</span>
+                      </>
+                    )}
+                    {cameraStatus === 'error' && (
+                      <>
+                        <span className="text-3xl">⚠️</span>
+                        <span className="text-xs text-red-300 font-medium px-4 text-center">{cameraError}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Plate detected confirmation overlay */}
+                {scanStatus === 'detected' && cameraStatus === 'on' && (
+                  <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-teal-500/85 backdrop-blur px-3 py-1.5 flex items-center justify-center gap-2">
+                    <span>✅</span>
+                    <span className="text-sm font-bold text-white font-mono tracking-wider">{vehicleRegistrationNumber}</span>
+                  </div>
+                )}
               </div>
 
-              {/* AI Scan button */}
-              <div className="px-5 pb-5">
+              {/* Camera + AI Scan controls */}
+              <div className="px-5 pb-5 grid grid-cols-2 gap-2.5">
+                {cameraStatus !== 'on' ? (
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    disabled={cameraStatus === 'starting'}
+                    className="col-span-2 sm:col-span-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-semibold text-sm disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  >
+                    {cameraStatus === 'starting' ? (
+                      <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Starting…</>
+                    ) : (
+                      <><span>📷</span> Start Camera</>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={stopCamera}
+                    className="col-span-2 sm:col-span-1 py-2.5 rounded-xl bg-navy-800 hover:bg-navy-700 border border-red-500/30 text-red-300 font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>⏹</span> Stop Camera
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={handleAIScan}
-                  disabled={scanStatus === 'scanning'}
-                  className="w-full py-2.5 rounded-xl bg-teal-600/20 border border-teal-500/30 text-teal-300 font-semibold text-sm hover:bg-teal-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                  disabled={scanStatus === 'scanning' || cameraStatus !== 'on'}
+                  className="col-span-2 sm:col-span-1 py-2.5 rounded-xl bg-teal-600/20 border border-teal-500/30 text-teal-300 font-semibold text-sm hover:bg-teal-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                 >
                   {scanStatus === 'scanning' ? (
-                    <><div className="w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" /> Scanning plate...</>
+                    <><div className="w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" /> Scanning…</>
                   ) : (
                     <><span>🤖</span> AI Scan Plate</>
                   )}

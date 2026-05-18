@@ -226,14 +226,28 @@ export default function RegisterPage() {
           >
             <div>
               <h1 className="text-xl font-bold text-blue-100">Enter Verification Code</h1>
-              <p className="text-xs text-blue-200/50 mt-1">We sent a 6-digit code to {email}</p>
+              <p className="text-xs text-blue-200/50 mt-1">
+                {devCode ? 'Email service not configured — your code is shown below' : `We sent a 6-digit code to ${email}`}
+              </p>
             </div>
 
             {devCode && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
-                <strong>Dev mode:</strong> Code is <code className="font-mono">{devCode}</code>
-                <p className="text-xs text-amber-300/70 mt-1">
-                  (No email provider configured. Set RESEND_API_KEY to send real emails.)
+              <div className="p-4 rounded-xl bg-amber-500/15 border-2 border-amber-400/50 text-center">
+                <p className="text-xs font-semibold text-amber-300/80 uppercase tracking-widest mb-2">
+                  Your verification code
+                </p>
+                <p className="text-3xl font-extrabold text-amber-200 font-mono tracking-[0.4em]">
+                  {devCode}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCode(devCode)}
+                  className="mt-3 text-xs text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  Tap to autofill →
+                </button>
+                <p className="text-[10px] text-amber-300/50 mt-2">
+                  Production emails require RESEND_API_KEY. See README.
                 </p>
               </div>
             )}
@@ -274,38 +288,49 @@ export default function RegisterPage() {
             key="success"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="glass rounded-3xl p-10 max-w-md w-full text-center border border-teal-500/20 teal-glow"
+            className="glass rounded-3xl p-8 max-w-md w-full text-center border-2 border-teal-400/50 teal-glow"
           >
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-              className="w-20 h-20 mx-auto rounded-full bg-teal-500/20 border-2 border-teal-400/40 flex items-center justify-center text-4xl mb-5"
+              className="w-20 h-20 mx-auto rounded-full bg-teal-500/30 border-2 border-teal-400/70 flex items-center justify-center text-4xl mb-5 shadow-lg shadow-teal-500/30"
             >
               ✓
             </motion.div>
-            <h2 className="text-2xl font-bold text-teal-300 mb-2">You&apos;re all set!</h2>
-            <p className="text-blue-200/70">Vehicle <strong className="text-blue-100 font-mono">{reg}</strong> registered.</p>
+
+            {/* BIG status banner */}
+            <div className="rounded-xl bg-teal-500/15 border border-teal-400/40 p-3 mb-5">
+              <p className="text-xs font-semibold text-teal-300/70 uppercase tracking-widest mb-1">
+                Status
+              </p>
+              <p className="text-2xl font-extrabold text-teal-300">✓ Registered</p>
+            </div>
+
+            <p className="text-blue-100 mb-1">
+              Vehicle <strong className="text-teal-300 font-mono">{reg}</strong>
+            </p>
+            <p className="text-blue-200/50 text-xs mb-2 break-all">{email}</p>
             <p className="text-blue-200/40 text-sm mt-2 mb-6">
               GPS will automatically log entry &amp; exit when you reach a tracked location.
             </p>
 
             <div className="rounded-xl bg-navy-800/40 border border-teal-500/15 p-4 text-left text-xs text-blue-200/60 space-y-1.5 mb-6">
-              <div>• Keep this tab open while traveling</div>
-              <div>• Allow location access when prompted</div>
-              <div>• Your session expires in 24 hours</div>
+              <div className="flex items-center gap-2"><span className="text-teal-400">✓</span> Vehicle bound to this device</div>
+              <div className="flex items-center gap-2"><span className="text-teal-400">✓</span> Session active for 24 hours</div>
+              <div className="flex items-center gap-2"><span className="text-teal-400">✓</span> Auto-tracking enabled</div>
             </div>
 
             <div className="flex gap-3 justify-center">
               <Link
                 href="/track"
-                className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-medium text-sm"
+                className="px-6 py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-semibold text-sm"
               >
-                Open Tracker
+                Open Tracker →
               </Link>
               <Link
                 href="/"
-                className="px-6 py-2.5 rounded-xl glass border border-teal-500/25 text-teal-300 font-medium text-sm"
+                className="px-6 py-3 rounded-xl glass border border-teal-500/25 text-teal-300 font-medium text-sm"
               >
                 Home
               </Link>
