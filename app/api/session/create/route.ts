@@ -89,8 +89,15 @@ export async function POST(request: NextRequest) {
       ...(result.via === 'console' ? { devCode: code } : {}),
     });
   } catch (err) {
+    console.error('[/api/session/create] error:', err);
+    const e = err as { message?: string; details?: string; hint?: string; code?: string };
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to create session' },
+      {
+        error: e.message || 'Failed to create session',
+        details: e.details ?? null,
+        hint: e.hint ?? null,
+        code: e.code ?? null,
+      },
       { status: 500 },
     );
   }

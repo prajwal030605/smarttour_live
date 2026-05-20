@@ -31,8 +31,17 @@ export async function GET(request: NextRequest) {
     if (id) return NextResponse.json(mockDb.locations.findById(id));
     return NextResponse.json(mockDb.locations.selectAll());
   } catch (err) {
+    // Surface full Supabase error details (Postgres errors have .message, .details, .hint, .code
+    // that are NOT captured by `instanceof Error` alone).
+    console.error('[/api/locations GET] error:', err);
+    const e = err as { message?: string; details?: string; hint?: string; code?: string };
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to fetch locations' },
+      {
+        error: e.message || 'Failed to fetch locations',
+        details: e.details ?? null,
+        hint: e.hint ?? null,
+        code: e.code ?? null,
+      },
       { status: 500 },
     );
   }
