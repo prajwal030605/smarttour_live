@@ -30,6 +30,12 @@ interface PredictionData {
   mse: number;
   modelName?: string;
   components?: { level: number; trend: number; seasonality: number };
+  locationId?: string | null;
+  locationName?: string | null;
+  locationSlug?: string | null;
+  forecast?: { date: string; dow: string; value: number; status: CrowdStatus }[];
+  historicalSeries?: number[];
+  thresholds?: { high: number; critical: number };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -505,13 +511,33 @@ export default function AdminPage() {
                   exit={{ opacity: 0 }}
                   className="space-y-4"
                 >
+                  {/* Location picker */}
+                  <div className="glass rounded-2xl p-4 border border-teal-500/20 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                    <label className="text-xs font-semibold text-blue-200/60 uppercase tracking-widest shrink-0">
+                      Forecast for:
+                    </label>
+                    <select
+                      value={selectedLocId ?? ''}
+                      onChange={(e) => setSelectedLocId(e.target.value || null)}
+                      className="flex-1 px-4 py-2 rounded-xl bg-navy-800/60 border border-teal-500/25 text-blue-100 text-sm focus:border-teal-500 focus:outline-none"
+                    >
+                      <option value="">All destinations (aggregate)</option>
+                      {summaries.map((s) => (
+                        <option key={s.location.id} value={s.location.id}>
+                          {s.location.name}{s.location.district ? ` — ${s.location.district}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Headline card */}
                   <div className="glass rounded-2xl p-6 border border-teal-500/20">
                     <div className="flex items-start justify-between mb-5">
                       <div>
                         <p className="text-xs text-blue-200/40 font-medium uppercase tracking-widest mb-1">
-                          Tomorrow&apos;s Forecast
+                          Tomorrow&apos;s Forecast · {prediction?.locationName ?? (selectedLocId ? 'Loading…' : 'All destinations')}
                         </p>
-                        <p className="text-4xl font-extrabold text-teal-300">
+                        <p className="text-5xl font-extrabold text-teal-300">
                           {prediction?.predictedInflow ?? '—'}
                         </p>
                         <p className="text-sm text-blue-200/40 mt-1">estimated vehicle entries</p>
@@ -553,6 +579,58 @@ export default function AdminPage() {
                       </p>
                     </div>
                   </div>
+
+                  {/* 7-day forecast grid */}
+                  {prediction?.forecast && prediction.forecast.length > 0 && (
+                    <div className="glass rounded-2xl p-5 border border-teal-500/20">
+                      <p className="text-xs font-semibold text-blue-200/60 uppercase tracking-widest mb-4">
+                        Next 7 Days · {prediction.locationName ?? 'All destinations'}
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                        {prediction.forecast.map((day) => {
+                          const max = Math.max(...(prediction.forecast?.map((d) => d.value) ?? [1]), 1);
+                          const heightPct = Math.round((day.value / max) * 100);
+                          return (
+                            <div
+                              key={day.date}
+                              className="rounded-xl bg-navy-800/40 border border-teal-500/15 p-3 flex flex-col items-center"
+                            >
+                              <p className="text-xs text-blue-200/40 font-semibold uppercase tracking-wider mb-1">
+                                {day.dow}
+                              </p>
+                              <p className="text-xs text-blue-200/25 mb-2">
+                                {day.date.slice(5)}
+                              </p>
+                              <div className="h-20 w-6 rounded bg-navy-900/60 flex items-end mb-2 overflow-hidden">
+                                <div
+                                  className={
+                                    day.status === 'critical'
+                                      ? 'w-full bg-red-500'
+                                      : day.status === 'high'
+                                        ? 'w-full bg-amber-500'
+                                        : 'w-full bg-emerald-500'
+                                  }
+                                  style={{ height: `${heightPct}%` }}
+                                />
+                              </div>
+                              <p className="text-lg font-bold text-blue-100">{day.value}</p>
+                              <p
+                                className={`text-[10px] font-semibold uppercase mt-0.5 ${
+                                  day.status === 'critical'
+                                    ? 'text-red-300'
+                                    : day.status === 'high'
+                                      ? 'text-amber-300'
+                                      : 'text-emerald-300'
+                                }`}
+                              >
+                                {day.status}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* How it works */}
                   <div className="glass rounded-2xl p-5 border border-teal-500/10 space-y-2">

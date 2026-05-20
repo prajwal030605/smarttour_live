@@ -34,35 +34,41 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Pull 30-day entry log
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const fromDate = thirtyDaysAgo.toISOString();
-
-    let logList: { created_at: string }[] = [];
+    // ─── Pull daily entry counts via RPC (bypasses 1000-row cap).
+    // Falls back to row-fetch if RPC isn't installed (defensive).
+    const byDateMap = new Map<string, number>();
 
     if (supabaseServer) {
-      let q = supabaseServer
-        .from('vehicle_logs')
-        .select('created_at')
-        .gte('created_at', fromDate)
-        .eq('type', 'entry');
-      if (resolvedId) q = q.eq('location_id', resolvedId);
-      const { data, error } = await q;
-      if (error) throw error;
-      logList = data ?? [];
+      const { data: dailyData, error: rpcError } = await supabaseServer
+        .rpc('get_daily_entry_counts', { loc_id: resolvedId, days_back: 30 });
+
+      if (rpcError) {
+        // Fallback: pre-RPC era — fetch rows (capped, but works for small datasets)
+        let q = supabaseServer
+          .from('vehicle_logs')
+          .select('created_at')
+          .gte('created_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+          .eq('type', 'entry');
+        if (resolvedId) q = q.eq('location_id', resolvedId);
+        const { data } = await q;
+        for (const log of (data ?? [])) {
+          const k = (log.created_at as string).slice(0, 10);
+          byDateMap.set(k, (byDateMap.get(k) ?? 0) + 1);
+        }
+      } else {
+        for (const row of (dailyData ?? []) as { entry_date: string; entry_count: number }[]) {
+          byDateMap.set(row.entry_date, Number(row.entry_count));
+        }
+      }
     } else {
+      const fromDate = new Date(Date.now() - 30 * 86_400_000).toISOString();
       const logs = mockDb.vehicleLogs
         .selectSince(fromDate, resolvedId ?? undefined)
         .filter((l) => l.type === 'entry');
-      logList = logs.map((l) => ({ created_at: l.created_at }));
-    }
-
-    // Aggregate into daily counts, filling in 0-gaps for missing days
-    const byDateMap = new Map<string, number>();
-    for (const log of logList) {
-      const key = log.created_at.slice(0, 10);
-      byDateMap.set(key, (byDateMap.get(key) ?? 0) + 1);
+      for (const l of logs) {
+        const k = l.created_at.slice(0, 10);
+        byDateMap.set(k, (byDateMap.get(k) ?? 0) + 1);
+      }
     }
 
     // Build dense 30-day series (last 30 calendar days, padded with 0 where missing)
@@ -74,9 +80,11 @@ export async function GET(request: NextRequest) {
       series.push(byDateMap.get(key) ?? 0);
     }
 
-    // Train model and forecast tomorrow (h=1)
+    // Train model and produce a 7-day forecast
     const model = trainHoltWinters(series);
-    const predictedInflow = model.forecast(1);
+    const forecast7: number[] = [];
+    for (let h = 1; h <= 7; h++) forecast7.push(Math.max(0, Math.round(model.forecast(h))));
+    const predictedInflow = forecast7[0];
     const mse = Math.round(model.rmse * model.rmse * 100) / 100;
 
     // Threshold resolution
@@ -111,12 +119,47 @@ export async function GET(request: NextRequest) {
     if (predictedInflow >= criticalLimit) predictedStatus = 'critical';
     else if (predictedInflow >= highLimit) predictedStatus = 'high';
 
+    // Resolve location name for display
+    let locationName: string | null = null;
+    let locationSlugOut: string | null = null;
+    if (resolvedId && supabaseServer) {
+      const { data: locRow } = await supabaseServer
+        .from('locations')
+        .select('name, slug')
+        .eq('id', resolvedId)
+        .single();
+      locationName = locRow?.name ?? null;
+      locationSlugOut = locRow?.slug ?? null;
+    } else if (resolvedId) {
+      const loc = mockDb.locations.findById(resolvedId);
+      locationName = loc?.name ?? null;
+      locationSlugOut = loc?.slug ?? null;
+    }
+
+    // 7-day forecast with day-of-week labels
+    const forecastDays = forecast7.map((value, idx) => {
+      const date = new Date();
+      date.setDate(date.getDate() + idx + 1);
+      const dow = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const iso = date.toISOString().slice(0, 10);
+      let status: CrowdStatus = 'normal';
+      if (value >= criticalLimit) status = 'critical';
+      else if (value >= highLimit) status = 'high';
+      return { date: iso, dow, value, status };
+    });
+
     return NextResponse.json({
       predictedInflow,
       predictedStatus,
       mse,
       modelName: 'Holt-Winters Triple Exponential Smoothing',
       components: model.components,
+      locationId: resolvedId,
+      locationName,
+      locationSlug: locationSlugOut,
+      forecast: forecastDays,         // [{date, dow, value, status}] × 7
+      historicalSeries: series,        // last 30 days of actuals
+      thresholds: { high: highLimit, critical: criticalLimit },
     });
   } catch (err) {
     return NextResponse.json(
