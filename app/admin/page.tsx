@@ -110,6 +110,14 @@ export default function AdminPage() {
     return () => clearInterval(t);
   }, [isAuth, fetchData]);
 
+  // Auto-select the busiest location for the forecast demo so the
+  // tab opens with meaningful numbers and a visible weekend spike.
+  useEffect(() => {
+    if (selectedLocId || summaries.length === 0) return;
+    const busiest = [...summaries].sort((a, b) => b.activeVehicles - a.activeVehicles)[0];
+    setSelectedLocId(busiest.location.id);
+  }, [summaries, selectedLocId]);
+
   // ─── Auth ──────────────────────────────────────────────────────────────────
 
   const handleLogin = (e: React.FormEvent) => {
@@ -540,7 +548,7 @@ export default function AdminPage() {
                         <p className="text-5xl font-extrabold text-teal-300">
                           {prediction?.predictedInflow ?? '—'}
                         </p>
-                        <p className="text-sm text-blue-200/40 mt-1">estimated vehicle entries</p>
+                        <p className="text-sm text-blue-200/40 mt-1">new vehicle entries expected tomorrow</p>
                       </div>
                       <span
                         className={`mt-1 px-3 py-1 rounded-full text-sm font-semibold border ${STATUS_BADGE[prediction?.predictedStatus ?? 'normal']}`}
