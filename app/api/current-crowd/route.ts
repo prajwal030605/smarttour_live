@@ -168,6 +168,9 @@ async function buildSummary(): Promise<LocationCrowdSummary[]> {
     // Fetch locations + ALL counts in parallel using one big SQL trip per type
     // (3 round-trips total instead of 1 + 3*N).
     const todayIso = todayStart.toISOString();
+    // Supabase JS caps select() at 1000 rows by default. Explicit range
+    // lifts the cap so a stadium-sized crowd (e.g. Haridwar 15k) tallies right.
+    const ROW_CAP = 99_999;
     const [locsRes, activeRes, entriesRes, exitsRes] = await Promise.all([
       supabaseServer
         .from('locations')
@@ -176,17 +179,20 @@ async function buildSummary(): Promise<LocationCrowdSummary[]> {
         .order('name'),
       supabaseServer
         .from('active_vehicles')
-        .select('location_id'),
+        .select('location_id')
+        .range(0, ROW_CAP),
       supabaseServer
         .from('vehicle_logs')
         .select('location_id')
         .eq('type', 'entry')
-        .gte('created_at', todayIso),
+        .gte('created_at', todayIso)
+        .range(0, ROW_CAP),
       supabaseServer
         .from('vehicle_logs')
         .select('location_id')
         .eq('type', 'exit')
-        .gte('created_at', todayIso),
+        .gte('created_at', todayIso)
+        .range(0, ROW_CAP),
     ]);
 
     // Group counts by location_id client-side
