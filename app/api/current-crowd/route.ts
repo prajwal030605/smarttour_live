@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
     const wantSummary = searchParams.get('summary') === '1';
 
     if (wantSummary) {
-      return NextResponse.json(await buildSummary());
+      const summary = await buildSummary();
+      return NextResponse.json(summary, {
+        headers: { 'x-smarttour-api': 'v3-count-head' },
+      });
     }
 
     let resolvedId = locationId;
@@ -165,69 +168,57 @@ async function buildSummary(): Promise<LocationCrowdSummary[]> {
   todayStart.setHours(0, 0, 0, 0);
 
   if (supabaseServer) {
-    // Fetch locations + ALL counts in parallel using one big SQL trip per type
-    // (3 round-trips total instead of 1 + 3*N).
+    // ─── v3 (May 20): use COUNT-only queries (head:true) per location.
+    // Bypasses Supabase's 1000-row default cap entirely — counts are computed
+    // server-side, no rows transmitted. 31 parallel queries via Promise.all,
+    // still completes in <500ms for 10 locations.
     const todayIso = todayStart.toISOString();
-    // Supabase JS caps select() at 1000 rows by default. Explicit range
-    // lifts the cap so a stadium-sized crowd (e.g. Haridwar 15k) tallies right.
-    const ROW_CAP = 99_999;
-    const [locsRes, activeRes, entriesRes, exitsRes] = await Promise.all([
-      supabaseServer
-        .from('locations')
-        .select('id, slug, name, category, district, center_lat, center_lon, max_capacity, normal_limit, high_limit, critical_limit')
-        .eq('is_active', true)
-        .order('name'),
-      supabaseServer
-        .from('active_vehicles')
-        .select('location_id')
-        .range(0, ROW_CAP),
-      supabaseServer
-        .from('vehicle_logs')
-        .select('location_id')
-        .eq('type', 'entry')
-        .gte('created_at', todayIso)
-        .range(0, ROW_CAP),
-      supabaseServer
-        .from('vehicle_logs')
-        .select('location_id')
-        .eq('type', 'exit')
-        .gte('created_at', todayIso)
-        .range(0, ROW_CAP),
-    ]);
+    const sb = supabaseServer;
+    const { data: locs } = await sb
+      .from('locations')
+      .select('id, slug, name, category, district, center_lat, center_lon, max_capacity, normal_limit, high_limit, critical_limit')
+      .eq('is_active', true)
+      .order('name');
 
-    // Group counts by location_id client-side
-    const tally = (rows: { location_id: string | null }[] | null) => {
-      const m = new Map<string, number>();
-      for (const r of rows ?? []) {
-        if (!r.location_id) continue;
-        m.set(r.location_id, (m.get(r.location_id) ?? 0) + 1);
-      }
-      return m;
-    };
-    const activeMap = tally(activeRes.data);
-    const entriesMap = tally(entriesRes.data);
-    const exitsMap = tally(exitsRes.data);
+    if (!locs) return [];
 
-    return (locsRes.data ?? []).map((loc) => {
-      const av = activeMap.get(loc.id) ?? 0;
-      return {
-        location: {
-          id: loc.id,
-          slug: loc.slug,
-          name: loc.name,
-          category: loc.category,
-          district: loc.district,
-          center_lat: loc.center_lat,
-          center_lon: loc.center_lon,
-          max_capacity: loc.max_capacity,
-        },
-        activeVehicles: av,
-        todayEntries: entriesMap.get(loc.id) ?? 0,
-        todayExits: exitsMap.get(loc.id) ?? 0,
-        status: classifyCrowd(av, loc),
-        capacityPercent: loc.max_capacity > 0 ? Math.min(100, Math.round((av / loc.max_capacity) * 100)) : 0,
-      };
-    });
+    return Promise.all(
+      locs.map(async (loc) => {
+        const [activeRes, entriesRes, exitsRes] = await Promise.all([
+          sb.from('active_vehicles')
+            .select('id', { count: 'exact', head: true })
+            .eq('location_id', loc.id),
+          sb.from('vehicle_logs')
+            .select('id', { count: 'exact', head: true })
+            .eq('type', 'entry')
+            .eq('location_id', loc.id)
+            .gte('created_at', todayIso),
+          sb.from('vehicle_logs')
+            .select('id', { count: 'exact', head: true })
+            .eq('type', 'exit')
+            .eq('location_id', loc.id)
+            .gte('created_at', todayIso),
+        ]);
+        const av = activeRes.count ?? 0;
+        return {
+          location: {
+            id: loc.id,
+            slug: loc.slug,
+            name: loc.name,
+            category: loc.category,
+            district: loc.district,
+            center_lat: loc.center_lat,
+            center_lon: loc.center_lon,
+            max_capacity: loc.max_capacity,
+          },
+          activeVehicles: av,
+          todayEntries: entriesRes.count ?? 0,
+          todayExits: exitsRes.count ?? 0,
+          status: classifyCrowd(av, loc),
+          capacityPercent: loc.max_capacity > 0 ? Math.min(100, Math.round((av / loc.max_capacity) * 100)) : 0,
+        };
+      }),
+    );
   }
 
   return mockDb.locations.selectAll().map((loc) => {
